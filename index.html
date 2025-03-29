@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Folder Structure Editor</title>
+    
+    <!-- External Resources -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.12.0/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" 
+          crossorigin="anonymous" referrerpolicy="no-referrer" />
+    
+    <style>
+      /* Custom styles */
+      .folder-item {
+        transition: background-color 0.2s ease;
+      }
+      .folder-item:hover {
+        background-color: #f8fafc !important;
+      }
+      .folder-children {
+        transition: max-height 0.3s ease, opacity 0.2s ease;
+        overflow: hidden;
+      }
+      .folder-children.collapsed {
+        max-height: 0;
+        opacity: 0;
+      }
+      .folder-children.expanded {
+        max-height: 5000px; /* Arbitrary large value */
+        opacity: 1;
+      }
+      .controls {
+        opacity: 0.5;
+        transition: opacity 0.2s ease;
+      }
+      .folder-item:hover .controls {
+        opacity: 1;
+      }
+      [contenteditable]:focus {
+        outline: 2px solid #3b82f6;
+        outline-offset: 2px;
+        border-radius: 0.25rem;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-800 min-h-screen" x-data="folderTree()" x-init="init()">
+    <header class="bg-white shadow-sm sticky top-0 z-10">
+      <div class="container mx-auto p-4 flex flex-wrap gap-2 items-center">
+        <h1 class="text-xl font-bold mr-4">Folder Structure Editor</h1>
+        <button class="btn-primary" @click="addRootFolder">
+          <i class="fas fa-plus mr-1"></i> Add Root Folder
+        </button>
+        <button class="btn-success" @click="saveStructure">
+          <i class="fas fa-save mr-1"></i> Save
+        </button>
+        <button class="btn-warning" @click="loadStructure">
+          <i class="fas fa-folder-open mr-1"></i> Load
+        </button>
+        <button class="btn-dark" @click="exportStructure">
+          <i class="fas fa-file-export mr-1"></i> Export JSON
+        </button>
+        <button class="btn-purple" @click="exportAsImage">
+          <i class="fas fa-image mr-1"></i> Export Image
+        </button>
+        <button class="btn-danger" @click="toggleDelete">
+          <i :class="showDelete ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
+          <span class="ml-1">Delete Mode</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="container mx-auto p-4">
+      <div id="container" class="bg-white rounded-lg shadow p-4"></div>
+      
+      <!-- Toast Notification -->
+      <div x-show="showToast" x-transition 
+           class="fixed bottom-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg flex items-center">
+        <i class="fas fa-check-circle mr-2"></i>
+        <span x-text="toastMessage"></span>
+      </div>
+    </main>
+
+    <script>
+      function folderTree() {
+        return {
+          folderObj: [],
+          showDelete: false,
+          showToast: false,
+          toastMessage: '',
+          toastTimeout: null,
+
+          showNotification(message) {
+            this.toastMessage = message;
+            this.showToast = true;
+            
+            if (this.toastTimeout) {
+              clearTimeout(this.toastTimeout);
+            }
+            
+            this.toastTimeout = setTimeout(() => {
+              this.showToast = false;
+            }, 3000);
+          },
+
+          render() {
+            const containerEl = document.getElementById("container");
+            containerEl.innerHTML = '';
+            
+            if (this.folderObj.length === 0) {
+              containerEl.innerHTML = `
+                <div class="text-center py-8 text-gray-500">
+                  <i class="fas fa-folder-open text-4xl mb-2"></i>
+                  <p>No folders yet. Click "Add Root Folder" to get started.</p>
+                </div>
+              `;
+              return;
+            }
+            
+            const ul = document.createElement("ul");
+            ul.className = "space-y-1";
+            
+            this.folderObj.forEach((item, index) => {
+              ul.append(this.createList(item, this.folderObj, index));
+            });
+            
+            containerEl.append(ul);
+            this.makeSortable(ul, this.folderObj);
+          },
+
+          createList(obj, parent, index) {
+            const li = document.createElement("li");
+            li.className = "folder-item";
+            
+            const wrapper = document.createElement("div");
+            wrapper.className = `flex items-center gap-2 px-3 py-2 rounded ${obj.folder ? 'bg-blue-50' : 'bg-gray-50'}`;
+            
+            const icon = document.createElement("span");
+            icon.className = "text-gray-500";
+            icon.innerHTML = obj.folder 
+              ? '<i class="fas fa-folder mr-2"></i>' 
+              : '<i class="fas fa-file mr-2"></i>';
+            
+            const name = document.createElement("span");
+            name.textContent = obj.name;
+            name.contentEditable = true;
+            name.className = "outline-none flex-1 min-w-0";
+            name.onblur = () => {
+              const newName = name.textContent.trim();
+              if (newName !== obj.name) {
+                obj.name = newName;
+                this.showNotification('Name updated');
+              }
+            };
+            
+            const controls = document.createElement("span");
+            controls.className = "ml-auto flex gap-2 controls";
+            
+            if (obj.folder) {
+              const addFolderBtn = document.createElement("button");
+              addFolderBtn.innerHTML = '<i class="fas fa-folder-plus"></i>';
+              addFolderBtn.className = "btn-icon btn-blue";
+              addFolderBtn.title = "Add subfolder";
+              addFolderBtn.onclick = (e) => {
+                e.stopPropagation();
+                obj.folder.push({ 
+                  name: "New Folder", 
+                  folder: [] 
+                });
+                this.render();
+                this.showNotification('Folder added');
+              };
+              
+              const addFileBtn = document.createElement("button");
+              addFileBtn.innerHTML = '<i class="fas fa-file-circle-plus"></i>';
+              addFileBtn.className = "btn-icon btn-green";
+              addFileBtn.title = "Add file";
+              addFileBtn.onclick = (e) => {
+                e.stopPropagation();
+                obj.folder.push({ 
+                  name: "new_file.js" 
+                });
+                this.render();
+                this.showNotification('File added');
+              };
+              
+              controls.append(addFolderBtn, addFileBtn);
+            }
+            
+            if (this.showDelete) {
+              const delBtn = document.createElement("button");
+              delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+              delBtn.className = "btn-icon btn-red";
+              delBtn.title = "Delete";
+              delBtn.onclick = (e) => {
+                e.stopPropagation();
+                parent.splice(index, 1);
+                this.render();
+                this.showNotification('Item deleted');
+              };
+              controls.appendChild(delBtn);
+            }
+            
+            wrapper.append(icon, name, controls);
+            li.append(wrapper);
+            
+            if (obj.folder) {
+              const ul = document.createElement("ul");
+              ul.className = "folder-children ml-6 mt-1 collapsed";
+              
+              obj.folder.forEach((child, i) => {
+                ul.append(this.createList(child, obj.folder, i));
+              });
+              
+              li.append(ul);
+              this.makeSortable(ul, obj.folder);
+              
+              wrapper.onclick = (e) => {
+                // Don't toggle if clicking on editable name or buttons
+                if (e.target.contentEditable === 'true' || e.target.closest('button')) {
+                  return;
+                }
+                
+                ul.classList.toggle("collapsed");
+                ul.classList.toggle("expanded");
+                icon.innerHTML = ul.classList.contains("collapsed")
+                  ? '<i class="fas fa-folder mr-2"></i>'
+                  : '<i class="fas fa-folder-open mr-2"></i>';
+              };
+            }
+            
+            return li;
+          },
+
+          makeSortable(ul, arrRef) {
+            new Sortable(ul, {
+              animation: 150,
+              ghostClass: 'bg-blue-100',
+              onEnd: (evt) => {
+                const [moved] = arrRef.splice(evt.oldIndex, 1);
+                arrRef.splice(evt.newIndex, 0, moved);
+                this.showNotification('Structure updated');
+              }
+            });
+          },
+
+          saveStructure() {
+            try {
+              localStorage.setItem('folder-structure', JSON.stringify(this.folderObj));
+              this.showNotification('Structure saved to browser storage');
+            } catch (e) {
+              this.showNotification('Error saving structure');
+              console.error(e);
+            }
+          },
+
+          loadStructure() {
+            try {
+              const saved = localStorage.getItem('folder-structure');
+              if (saved) {
+                this.folderObj = JSON.parse(saved);
+                this.render();
+                this.showNotification('Structure loaded');
+              } else {
+                this.showNotification('No saved structure found');
+              }
+            } catch (e) {
+              this.showNotification('Error loading structure');
+              console.error(e);
+            }
+          },
+
+          exportStructure() {
+            try {
+              const data = JSON.stringify(this.folderObj, null, 2);
+              const blob = new Blob([data], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = 'folder-structure.json';
+              a.click();
+              URL.revokeObjectURL(url);
+              this.showNotification('JSON exported');
+            } catch (e) {
+              this.showNotification('Export failed');
+              console.error(e);
+            }
+          },
+
+          exportAsImage() {
+            try {
+              this.showNotification('Preparing image...');
+              html2canvas(document.getElementById("container")).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'folder-structure.png';
+                link.href = canvas.toDataURL('image/png', 1.0);
+                link.click();
+                this.showNotification('Image exported');
+              }).catch(e => {
+                this.showNotification('Image export failed');
+                console.error(e);
+              });
+            } catch (e) {
+              this.showNotification('Export failed');
+              console.error(e);
+            }
+          },
+
+          toggleDelete() {
+            this.showDelete = !this.showDelete;
+            this.showNotification(this.showDelete ? 'Delete mode enabled' : 'Delete mode disabled');
+          },
+
+          addRootFolder() {
+            this.folderObj.push({ 
+              name: 'New Root Folder', 
+              folder: [] 
+            });
+            this.render();
+            this.showNotification('Root folder added');
+          },
+
+          init() {
+            try {
+              const saved = localStorage.getItem('folder-structure');
+              this.folderObj = saved ? JSON.parse(saved) : [
+                {
+                  name: "Validators",
+                  folder: [
+                    { name: "admin_locations.js" },
+                    { name: "coach_lessons.js" },
+                    { name: "coach_players.js" },
+                    { name: "coach_profile.js" },
+                    { name: "coach_schedule.js" },
+                    { name: "locations.js" },
+                    { name: "player_coaches.js" },
+                    { name: "player_lessons.js" },
+                    { name: "player_profile.js" },
+                    { name: "player_schedule.js" },
+                    { name: "stripe.js" }
+                  ]
+                }
+              ];
+              this.render();
+            } catch (e) {
+              console.error('Initialization error:', e);
+              this.folderObj = [];
+              this.render();
+            }
+          }
+        };
+      }
+    </script>
+    
+    <script>
+      // Configure Tailwind
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'btn-blue': '#3b82f6',
+              'btn-green': '#10b981',
+              'btn-red': '#ef4444',
+              'btn-yellow': '#f59e0b',
+              'btn-purple': '#8b5cf6',
+              'btn-dark': '#1e293b',
+            }
+          }
+        }
+      }
+    </script>
+    
+    <style>
+      /* Button styles */
+      .btn {
+        @apply px-3 py-2 rounded-md text-white font-medium transition-all flex items-center;
+      }
+      .btn-primary {
+        @apply btn bg-btn-blue hover:bg-blue-600;
+      }
+      .btn-success {
+        @apply btn bg-btn-green hover:bg-green-700;
+      }
+      .btn-danger {
+        @apply btn bg-btn-red hover:bg-red-700;
+      }
+      .btn-warning {
+        @apply btn bg-btn-yellow hover:bg-yellow-600;
+      }
+      .btn-purple {
+        @apply btn bg-btn-purple hover:bg-purple-700;
+      }
+      .btn-dark {
+        @apply btn bg-btn-dark hover:bg-gray-800;
+      }
+      .btn-icon {
+        @apply w-8 h-8 rounded-full flex items-center justify-center text-white opacity-80 hover:opacity-100 transition-opacity;
+      }
+      .btn-blue {
+        @apply bg-blue-500 hover:bg-blue-600;
+      }
+      .btn-green {
+        @apply bg-green-500 hover:bg-green-600;
+      }
+      .btn-red {
+        @apply bg-red-500 hover:bg-red-600;
+      }
+    </style>
+  </body>
+</html>
