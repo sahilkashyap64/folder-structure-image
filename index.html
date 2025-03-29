@@ -31,7 +31,7 @@
         opacity: 0;
       }
       .folder-children.expanded {
-        max-height: 5000px; /* Arbitrary large value */
+        max-height: 5000px;
         opacity: 1;
       }
       .controls {
@@ -45,6 +45,13 @@
         outline: 2px solid #3b82f6;
         outline-offset: 2px;
         border-radius: 0.25rem;
+      }
+      #jsonEditor {
+        font-family: monospace;
+        min-height: 300px;
+      }
+      .modal {
+        transition: opacity 0.3s ease, visibility 0.3s ease;
       }
     </style>
   </head>
@@ -67,9 +74,12 @@
         <button class="btn-purple" @click="exportAsImage">
           <i class="fas fa-image mr-1"></i> Export Image
         </button>
-        <button class="btn-danger" @click="toggleDelete">
+        <button class="btn-danger" @click="toggleDelete" :class="{'bg-red-700': showDelete}">
           <i :class="showDelete ? 'fas fa-eye' : 'fas fa-eye-slash'"></i>
           <span class="ml-1">Delete Mode</span>
+        </button>
+        <button class="btn-indigo" @click="openJsonEditor">
+          <i class="fas fa-code mr-1"></i> Edit JSON
         </button>
       </div>
     </header>
@@ -83,6 +93,31 @@
         <i class="fas fa-check-circle mr-2"></i>
         <span x-text="toastMessage"></span>
       </div>
+      
+      <!-- JSON Editor Modal -->
+      <div x-show="showJsonEditor" class="modal fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-20"
+           @click.away="closeJsonEditor">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div class="p-4 border-b flex justify-between items-center">
+            <h2 class="text-lg font-bold">Edit JSON Structure</h2>
+            <button @click="closeJsonEditor" class="text-gray-500 hover:text-gray-700">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="p-4 overflow-auto flex-grow">
+            <textarea id="jsonEditor" class="w-full h-full p-2 border rounded" 
+                      x-text="JSON.stringify(folderObj, null, 2)"></textarea>
+          </div>
+          <div class="p-4 border-t flex justify-end gap-2">
+            <button @click="closeJsonEditor" class="btn-gray">
+              Cancel
+            </button>
+            <button @click="applyJsonChanges" class="btn-primary">
+              Apply Changes
+            </button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <script>
@@ -93,6 +128,7 @@
           showToast: false,
           toastMessage: '',
           toastTimeout: null,
+          showJsonEditor: false,
 
           showNotification(message) {
             this.toastMessage = message;
@@ -313,6 +349,34 @@
           toggleDelete() {
             this.showDelete = !this.showDelete;
             this.showNotification(this.showDelete ? 'Delete mode enabled' : 'Delete mode disabled');
+            this.render(); // Re-render to show/hide delete buttons
+          },
+
+          openJsonEditor() {
+            this.showJsonEditor = true;
+            // Focus the textarea after it's rendered
+            this.$nextTick(() => {
+              const textarea = document.getElementById('jsonEditor');
+              textarea.focus();
+            });
+          },
+
+          closeJsonEditor() {
+            this.showJsonEditor = false;
+          },
+
+          applyJsonChanges() {
+            try {
+              const textarea = document.getElementById('jsonEditor');
+              const newStructure = JSON.parse(textarea.value);
+              this.folderObj = newStructure;
+              this.render();
+              this.closeJsonEditor();
+              this.showNotification('JSON changes applied');
+            } catch (e) {
+              this.showNotification('Invalid JSON structure');
+              console.error(e);
+            }
           },
 
           addRootFolder() {
@@ -368,6 +432,8 @@
               'btn-yellow': '#f59e0b',
               'btn-purple': '#8b5cf6',
               'btn-dark': '#1e293b',
+              'btn-indigo': '#6366f1',
+              'btn-gray': '#6b7280',
             }
           }
         }
@@ -396,6 +462,12 @@
       }
       .btn-dark {
         @apply btn bg-btn-dark hover:bg-gray-800;
+      }
+      .btn-indigo {
+        @apply btn bg-btn-indigo hover:bg-indigo-700;
+      }
+      .btn-gray {
+        @apply btn bg-btn-gray hover:bg-gray-600;
       }
       .btn-icon {
         @apply w-8 h-8 rounded-full flex items-center justify-center text-white opacity-80 hover:opacity-100 transition-opacity;
