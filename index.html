@@ -53,6 +53,41 @@
       .modal {
         transition: opacity 0.3s ease, visibility 0.3s ease;
       }
+      /* Tooltip styles */
+      .tooltip {
+        position: relative;
+        display: inline-block;
+      }
+      .tooltip .tooltiptext {
+        visibility: hidden;
+        width: 200px;
+        background-color: #333;
+        color: #fff;
+        text-align: center;
+        border-radius: 6px;
+        padding: 5px;
+        position: absolute;
+        z-index: 1;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 0;
+        transition: opacity 0.3s;
+      }
+      .tooltip .tooltiptext::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        margin-left: -5px;
+        border-width: 5px;
+        border-style: solid;
+        border-color: #333 transparent transparent transparent;
+      }
+      .tooltip:hover .tooltiptext {
+        visibility: visible;
+        opacity: 1;
+      }
     </style>
   </head>
   <body class="bg-gray-50 text-gray-800 min-h-screen" x-data="folderTree()" x-init="init()">
@@ -61,6 +96,9 @@
         <h1 class="text-xl font-bold mr-4">Folder Structure Editor</h1>
         <button class="btn-primary" @click="addRootFolder">
           <i class="fas fa-plus mr-1"></i> Add Root Folder
+        </button>
+        <button class="btn-indigo" @click="addEmailGPSStructure">
+          <i class="fas fa-envelope mr-1"></i> Add Email GPS
         </button>
         <button class="btn-success" @click="saveStructure">
           <i class="fas fa-save mr-1"></i> Save
@@ -181,10 +219,13 @@
               ? '<i class="fas fa-folder mr-2"></i>' 
               : '<i class="fas fa-file mr-2"></i>';
             
+            const nameWrapper = document.createElement("div");
+            nameWrapper.className = "flex items-center gap-1 flex-1 min-w-0";
+            
             const name = document.createElement("span");
             name.textContent = obj.name;
             name.contentEditable = true;
-            name.className = "outline-none flex-1 min-w-0";
+            name.className = "outline-none";
             name.onblur = () => {
               const newName = name.textContent.trim();
               if (newName !== obj.name) {
@@ -192,6 +233,22 @@
                 this.showNotification('Name updated');
               }
             };
+            
+            nameWrapper.append(name);
+            
+            // Add info icon if description exists
+            if (obj.info) {
+              const infoIcon = document.createElement("span");
+              infoIcon.className = "tooltip ml-1 text-gray-400 hover:text-blue-500 cursor-pointer";
+              infoIcon.innerHTML = '<i class="fas fa-info-circle"></i>';
+              
+              const tooltip = document.createElement("span");
+              tooltip.className = "tooltiptext text-sm";
+              tooltip.textContent = obj.info;
+              
+              infoIcon.appendChild(tooltip);
+              nameWrapper.appendChild(infoIcon);
+            }
             
             const controls = document.createElement("span");
             controls.className = "ml-auto flex gap-2 controls";
@@ -241,7 +298,7 @@
               controls.appendChild(delBtn);
             }
             
-            wrapper.append(icon, name, controls);
+            wrapper.append(icon, nameWrapper, controls);
             li.append(wrapper);
             
             if (obj.folder) {
@@ -284,6 +341,70 @@
             });
           },
 
+          addEmailGPSStructure() {
+            this.folderObj.push({
+              name: "Email GPS",
+              info: "Smart folder structure for email management",
+              folder: [
+                { 
+                  name: "1. Your Name", 
+                  info: "Personal or urgent matters needing direct attention",
+                  folder: [] 
+                },
+                { 
+                  name: "2. Review", 
+                  info: "Emails requiring your input, decisions, or feedback",
+                  folder: [] 
+                },
+                { 
+                  name: "3. To Respond", 
+                  info: "Emails you want your assistant to handle responses for",
+                  folder: [] 
+                },
+                { 
+                  name: "4. Responded", 
+                  info: "Emails your assistant has responded to on your behalf",
+                  folder: [] 
+                },
+                { 
+                  name: "5. Waiting On", 
+                  info: "Emails where you're awaiting a reply",
+                  folder: [] 
+                },
+                { 
+                  name: "6. Financials", 
+                  info: "Invoices, payments, and contracts tracking",
+                  folder: [] 
+                },
+                { 
+                  name: "7. Newsletters", 
+                  info: "Categorized newsletters and subscriptions",
+                  folder: [
+                    { 
+                      name: "Mental Health Resources", 
+                      info: "Newsletters about mental health topics"
+                    },
+                    { 
+                      name: "Bullying Reports", 
+                      info: "Reports and updates about bullying issues"
+                    },
+                    { 
+                      name: "Dyslexia Inquiries", 
+                      info: "Information about dyslexia resources"
+                    },
+                    { 
+                      name: "Parent Content Ideas", 
+                      info: "Ideas and suggestions for parent-focused content"
+                    }
+                  ] 
+                }
+              ]
+            });
+            this.render();
+            this.showNotification('Email GPS structure added');
+          },
+
+          // [Rest of the methods remain the same as in your original code]
           saveStructure() {
             try {
               localStorage.setItem('folder-structure', JSON.stringify(this.folderObj));
@@ -349,12 +470,11 @@
           toggleDelete() {
             this.showDelete = !this.showDelete;
             this.showNotification(this.showDelete ? 'Delete mode enabled' : 'Delete mode disabled');
-            this.render(); // Re-render to show/hide delete buttons
+            this.render();
           },
 
           openJsonEditor() {
             this.showJsonEditor = true;
-            // Focus the textarea after it's rendered
             this.$nextTick(() => {
               const textarea = document.getElementById('jsonEditor');
               textarea.focus();
@@ -393,21 +513,63 @@
               const saved = localStorage.getItem('folder-structure');
               this.folderObj = saved ? JSON.parse(saved) : [
                 {
-                  name: "Validators",
+              name: "Email GPS",
+              info: "Smart folder structure for email management",
+              folder: [
+                { 
+                  name: "1. Your Name", 
+                  info: "Personal or urgent matters needing direct attention",
+                  folder: [] 
+                },
+                { 
+                  name: "2. Review", 
+                  info: "Emails requiring your input, decisions, or feedback",
+                  folder: [] 
+                },
+                { 
+                  name: "3. To Respond", 
+                  info: "Emails you want your assistant to handle responses for",
+                  folder: [] 
+                },
+                { 
+                  name: "4. Responded", 
+                  info: "Emails your assistant has responded to on your behalf",
+                  folder: [] 
+                },
+                { 
+                  name: "5. Waiting On", 
+                  info: "Emails where you're awaiting a reply",
+                  folder: [] 
+                },
+                { 
+                  name: "6. Financials", 
+                  info: "Invoices, payments, and contracts tracking",
+                  folder: [] 
+                },
+                { 
+                  name: "7. Newsletters", 
+                  info: "Categorized newsletters and subscriptions",
                   folder: [
-                    { name: "admin_locations.js" },
-                    { name: "coach_lessons.js" },
-                    { name: "coach_players.js" },
-                    { name: "coach_profile.js" },
-                    { name: "coach_schedule.js" },
-                    { name: "locations.js" },
-                    { name: "player_coaches.js" },
-                    { name: "player_lessons.js" },
-                    { name: "player_profile.js" },
-                    { name: "player_schedule.js" },
-                    { name: "stripe.js" }
-                  ]
+                    { 
+                      name: "Mental Health Resources", 
+                      info: "Newsletters about mental health topics"
+                    },
+                    { 
+                      name: "Bullying Reports", 
+                      info: "Reports and updates about bullying issues"
+                    },
+                    { 
+                      name: "Dyslexia Inquiries", 
+                      info: "Information about dyslexia resources"
+                    },
+                    { 
+                      name: "Parent Content Ideas", 
+                      info: "Ideas and suggestions for parent-focused content"
+                    }
+                  ] 
                 }
+              ]
+            }
               ];
               this.render();
             } catch (e) {
